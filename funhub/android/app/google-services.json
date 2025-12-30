@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "380873266872",
+    "project_id": "funhub-5a650",
+    "storage_bucket": "funhub-5a650.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:380873266872:android:428758c4e96a2d765c064d",
+        "android_client_info": {
+          "package_name": "com.example.funhub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpiiPjpNmIyqbYcgkujNCWKQkB5i7XU8k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
