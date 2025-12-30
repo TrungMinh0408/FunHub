@@ -8,6 +8,7 @@ import '../pages/chat_list_page.dart';
 import '../pages/home_page.dart';
 import '../pages/friend_page.dart';
 import '../pages/notifications_page.dart';
+import '../pages/post_search_delegate.dart';
 import '../pages/user_timeline_page.dart';
 import '../pages/saved_posts_page.dart';
 
@@ -50,8 +51,14 @@ class _MainLayoutState extends State<MainLayout> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {},
+            onPressed: () {
+              showSearch(
+                context: context,
+                delegate: PostSearchDelegate(userDoc: widget.userDoc),
+              );
+            },
           ),
+
 
           // ===== NÚT CHAT =====
           IconButton(

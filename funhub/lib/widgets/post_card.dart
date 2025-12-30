@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+
 import '../pages/comment_sheet.dart';
 import '../pages/home_page.dart';
 import '../pages/user_timeline_page.dart';
@@ -15,7 +16,7 @@ class PostCard extends StatelessWidget {
   final String postId;
   final Map<String, dynamic> postData;
   final DocumentSnapshot userDoc;
-  final VoidCallback? onPostChanged; // callback từ HomePage
+  final VoidCallback? onPostChanged;
 
   const PostCard({
     super.key,
@@ -25,6 +26,7 @@ class PostCard extends StatelessWidget {
     this.onPostChanged,
   });
 
+  // --- HELPER ---
   String _formatTime(Timestamp? ts) {
     if (ts == null) return '';
     final dt = ts.toDate();
@@ -38,6 +40,40 @@ class PostCard extends StatelessWidget {
     return "${dt.day}/${dt.month}/${dt.year}";
   }
 
+  // --- AVATAR WIDGET ---
+  Widget _avatarWidget(BuildContext context, String userId, String userName, String avatarUrl, {double radius = 20}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(radius + 4),
+      onTap: () async {
+        final snap = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+        if (!snap.exists || !context.mounted) return;
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PersonalProfilePage(userDoc: snap),
+          ),
+        );
+      },
+      child: CircleAvatar(
+        radius: radius,
+        backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
+        backgroundImage: (avatarUrl.isNotEmpty && avatarUrl.startsWith('http')) ? NetworkImage(avatarUrl) : null,
+        child: (avatarUrl.isEmpty || !avatarUrl.startsWith('http'))
+            ? Text(
+          userName.isNotEmpty ? userName.trim()[0].toUpperCase() : '?',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            fontSize: 16,
+          ),
+        )
+            : null,
+      ),
+    );
+  }
+
+  // --- LIKE POST ---
   Future<void> _toggleLike(BuildContext context) async {
     final firestore = FirebaseFirestore.instance;
     final uid = userDoc.id;
@@ -66,11 +102,11 @@ class PostCard extends StatelessWidget {
     });
   }
 
+  // --- SAVE POST ---
   Future<void> _toggleSavePost() async {
     final firestore = FirebaseFirestore.instance;
     final uid = userDoc.id;
-    final saveRef =
-    firestore.collection('users').doc(uid).collection('savedPosts').doc(postId);
+    final saveRef = firestore.collection('users').doc(uid).collection('savedPosts').doc(postId);
     final snap = await saveRef.get();
     if (snap.exists) {
       await saveRef.delete();
@@ -79,6 +115,7 @@ class PostCard extends StatelessWidget {
     }
   }
 
+  // --- COMMENT SHEET ---
   void _openCommentSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -116,6 +153,7 @@ class PostCard extends StatelessWidget {
     );
   }
 
+  // --- DELETE POST ---
   Future<void> _deletePost(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -136,20 +174,20 @@ class PostCard extends StatelessWidget {
       final likes = await firestore.collection('posts').doc(postId).collection('likes').get();
       for (var doc in likes.docs) await doc.reference.delete();
 
-      final comments =
-      await firestore.collection('posts').doc(postId).collection('comments').get();
+      final comments = await firestore.collection('posts').doc(postId).collection('comments').get();
       for (var doc in comments.docs) await doc.reference.delete();
 
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bài viết đã xóa')));
+        const SnackBar(content: Text('Bài viết đã xóa')),
+      );
 
       if (onPostChanged != null) onPostChanged!();
     }
   }
 
+  // --- EDIT POST ---
   Future<void> _editPost(BuildContext context) async {
-    final TextEditingController _controller =
-    TextEditingController(text: postData['content'] ?? '');
+    final TextEditingController _controller = TextEditingController(text: postData['content'] ?? '');
     List<Map<String, dynamic>> media = List<Map<String, dynamic>>.from(postData['media'] ?? []);
     final List<File> newMediaFiles = [];
     final List<String> newMediaTypes = [];
@@ -193,31 +231,21 @@ class PostCard extends StatelessWidget {
                                 width: 100,
                                 height: 100,
                                 color: Colors.grey[300],
-                                child: const Icon(
-                                  Icons.videocam,
-                                  size: 40,
-                                  color: Colors.white,
-                                ),
+                                child: const Icon(Icons.videocam, size: 40, color: Colors.white),
                               ),
                             ),
                             Positioned(
                               top: 4,
                               right: 4,
                               child: GestureDetector(
-                                onTap: () {
-                                  setState(() => media.removeAt(i));
-                                },
+                                onTap: () => setState(() => media.removeAt(i)),
                                 child: Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
                                     color: Colors.black.withOpacity(0.6),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
+                                  child: const Icon(Icons.close, size: 16, color: Colors.white),
                                 ),
                               ),
                             ),
@@ -336,6 +364,7 @@ class PostCard extends StatelessWidget {
     );
   }
 
+  // --- SHOW LIKED USERS ---
   void _showLikedUsers(BuildContext context) async {
     final firestore = FirebaseFirestore.instance;
 
@@ -358,21 +387,11 @@ class PostCard extends StatelessWidget {
     }
 
     final userIds = likesSnap.docs.map((d) => d.id).toList();
-
-    // Firestore whereIn giới hạn 10
     List<DocumentSnapshot> userDocs = [];
 
     for (int i = 0; i < userIds.length; i += 10) {
-      final batch = userIds.sublist(
-        i,
-        i + 10 > userIds.length ? userIds.length : i + 10,
-      );
-
-      final snap = await firestore
-          .collection('users')
-          .where(FieldPath.documentId, whereIn: batch)
-          .get();
-
+      final batch = userIds.sublist(i, i + 10 > userIds.length ? userIds.length : i + 10);
+      final snap = await firestore.collection('users').where(FieldPath.documentId, whereIn: batch).get();
       userDocs.addAll(snap.docs);
     }
 
@@ -390,44 +409,26 @@ class PostCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            // Header với thanh kéo
+            // Header
             Container(
               padding: const EdgeInsets.only(top: 12, bottom: 16),
               child: Column(
                 children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+                  Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.favorite,
-                        color: Colors.red[400],
-                        size: 20,
-                      ),
+                      Icon(Icons.favorite, color: Colors.red[400], size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        'Lượt thích (${userDocs.length})',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text('Lượt thích (${userDocs.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],
               ),
             ),
             const Divider(height: 1),
-
-            // Danh sách người dùng
+            // List
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -436,124 +437,26 @@ class PostCard extends StatelessWidget {
                   final u = userDocs[index];
                   final avatar = u['avatar'] ?? '';
                   final name = u['name'] ?? 'Người dùng';
+                  final userId = u.id;
 
                   return Container(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(12)),
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      leading: Stack(
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Theme.of(context).primaryColor.withOpacity(0.3),
-                                width: 2,
-                              ),
-                            ),
-                            child: StreamBuilder<DocumentSnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(postData['userId'])
-                                  .snapshots(),
-                              builder: (context, snap) {
-                                if (!snap.hasData) {
-                                  return CircleAvatar(
-                                    radius: 26,
-                                    backgroundColor:
-                                    Theme.of(context).primaryColor.withOpacity(0.2),
-                                  );
-                                }
-
-                                final u = snap.data!.data() as Map<String, dynamic>? ?? {};
-                                final avatar = (u['avatar'] ?? '').toString();
-                                final name = (u['name'] ?? '').toString();
-
-                                return CircleAvatar(
-                                  radius: 26,
-                                  backgroundColor:
-                                  Theme.of(context).primaryColor.withOpacity(0.2),
-                                  backgroundImage:
-                                  avatar.startsWith('http') ? NetworkImage(avatar) : null,
-                                  child: avatar.isEmpty
-                                      ? Text(
-                                    name.isNotEmpty ? name.trim()[0].toUpperCase() : '?',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                      : null,
-                                );
-                              },
-                            ),
-                          ),
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                color: Colors.red[400],
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Theme.of(context).scaffoldBackgroundColor,
-                                  width: 2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.favorite,
-                                size: 10,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      title: Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      leading: _avatarWidget(context, userId, name, avatar, radius: 26),
+                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                       trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: Theme.of(context).primaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(
-                          'Xem',
-                          style: TextStyle(
-                            color: Theme.of(context).primaryColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
+                        child: Text('Xem', style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.w600, fontSize: 13)),
                       ),
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => HomePage(userDoc: u),
-                          ),
-                        );
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => HomePage(userDoc: u)));
                       },
                     ),
                   );
@@ -572,63 +475,15 @@ class PostCard extends StatelessWidget {
     final media = (postData['media'] as List<dynamic>? ?? []);
     final avatarUrl = postData['userAvatar']?.toString() ?? '';
     final userName = postData['userName']?.toString() ?? '';
-
-    Widget avatarWidget = InkWell(
-      borderRadius: BorderRadius.circular(30),
-      onTap: () async {
-        final postOwnerId = postData['userId'];
-        if (postOwnerId == null) return;
-
-        final snap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(postOwnerId)
-            .get();
-
-        if (!context.mounted || !snap.exists) return;
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PersonalProfilePage(userDoc: snap),
-          ),
-        );
-      },
-      child: CircleAvatar(
-        radius: 20,
-        backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
-        backgroundImage:
-        (avatarUrl.isNotEmpty && avatarUrl.startsWith('http'))
-            ? NetworkImage(avatarUrl)
-            : null,
-        child: (avatarUrl.isEmpty)
-            ? Text(
-          userName.isNotEmpty
-              ? userName.trim()[0].toUpperCase()
-              : '?',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            fontSize: 16,
-          ),
-        )
-            : null,
-      ),
-    );
-
-
-    final isOwner = userDoc.id == postData['userId'];
+    final userId = postData['userId'] ?? '';
+    final isOwner = userDoc.id == userId;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -638,22 +493,19 @@ class PostCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                avatarWidget,
+                _avatarWidget(context, userId, userName, avatarUrl),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(postData['userName'] ?? '',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       const SizedBox(height: 4),
                       Row(
                         children: [
                           Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
                           const SizedBox(width: 4),
-                          Text(_formatTime(postData['createdAt']),
-                              style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                          Text(_formatTime(postData['createdAt']), style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                         ],
                       ),
                     ],
@@ -679,8 +531,7 @@ class PostCard extends StatelessWidget {
           if ((postData['content'] ?? '').toString().isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(postData['content'],
-                  style: const TextStyle(fontSize: 15, height: 1.4)),
+              child: Text(postData['content'], style: const TextStyle(fontSize: 15, height: 1.4)),
             ),
 
           // MEDIA
@@ -699,7 +550,6 @@ class PostCard extends StatelessWidget {
               stream: firestore.collection('posts').doc(postId).snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const SizedBox();
-
                 final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
                 final likeCount = data['likeCount'] ?? 0;
                 final commentCount = data['commentCount'] ?? 0;
@@ -714,51 +564,28 @@ class PostCard extends StatelessWidget {
                           children: [
                             Container(
                               padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.favorite,
-                                size: 12,
-                                color: Colors.white,
-                              ),
+                              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                              child: const Icon(Icons.favorite, size: 12, color: Colors.white),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              '$likeCount',
-                              style: TextStyle(
-                                color: Colors.grey[700],
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                            Text('$likeCount', style: TextStyle(color: Colors.grey[700], fontSize: 14, fontWeight: FontWeight.w500)),
                           ],
                         ),
                       ),
-
                     if (likeCount > 0 && commentCount > 0)
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 12),
                         width: 4,
                         height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[400],
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey[400], shape: BoxShape.circle),
                       ),
-
                     if (commentCount > 0)
-                      Text(
-                        '$commentCount bình luận',
-                        style: TextStyle(color: Colors.grey[700], fontSize: 14),
-                      ),
+                      Text('$commentCount bình luận', style: TextStyle(color: Colors.grey[700], fontSize: 14)),
                   ],
                 );
               },
             ),
           ),
-
           Divider(height: 1, color: Colors.grey[200]),
 
           // ACTIONS
@@ -769,12 +596,7 @@ class PostCard extends StatelessWidget {
                 // LIKE
                 Expanded(
                   child: StreamBuilder<DocumentSnapshot>(
-                    stream: firestore
-                        .collection('posts')
-                        .doc(postId)
-                        .collection('likes')
-                        .doc(userDoc.id)
-                        .snapshots(),
+                    stream: firestore.collection('posts').doc(postId).collection('likes').doc(userDoc.id).snapshots(),
                     builder: (context, snapshot) {
                       final isLiked = snapshot.hasData && snapshot.data!.exists;
                       return InkWell(
@@ -800,9 +622,7 @@ class PostCard extends StatelessWidget {
                     },
                   ),
                 ),
-
                 Container(width: 1, height: 24, color: Colors.grey[300]),
-
                 // COMMENT
                 Expanded(
                   child: InkWell(
@@ -815,25 +635,17 @@ class PostCard extends StatelessWidget {
                         children: [
                           Icon(Icons.chat_bubble_outline, color: Colors.grey[600], size: 22),
                           const SizedBox(width: 6),
-                          Text('Bình luận',
-                              style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500)),
+                          Text('Bình luận', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500)),
                         ],
                       ),
                     ),
                   ),
                 ),
-
                 Container(width: 1, height: 24, color: Colors.grey[300]),
-
                 // SAVE
                 Expanded(
                   child: StreamBuilder<DocumentSnapshot>(
-                    stream: firestore
-                        .collection('users')
-                        .doc(userDoc.id)
-                        .collection('savedPosts')
-                        .doc(postId)
-                        .snapshots(),
+                    stream: firestore.collection('users').doc(userDoc.id).collection('savedPosts').doc(postId).snapshots(),
                     builder: (context, snapshot) {
                       final isSaved = snapshot.hasData && snapshot.data!.exists;
                       return InkWell(
@@ -864,6 +676,5 @@ class PostCard extends StatelessWidget {
         ],
       ),
     );
-
   }
 }

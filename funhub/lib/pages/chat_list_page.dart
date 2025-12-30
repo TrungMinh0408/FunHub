@@ -139,8 +139,7 @@ class _ChatListPageState extends State<ChatListPage> {
                   Expanded(
                     child: ListView(
                       children: friendsDocs.map((doc) {
-                        final data =
-                            doc.data() as Map<String, dynamic>? ?? {};
+                        final data = doc.data() as Map<String, dynamic>? ?? {};
                         return CheckboxListTile(
                           value: selected.contains(doc.id),
                           title: Text(data['name'] ?? 'User'),
@@ -169,27 +168,40 @@ class _ChatListPageState extends State<ChatListPage> {
 
                   Navigator.pop(context);
 
-                  final ref = await _firestore.collection('chats').add({
-                    'type': 'group',
-                    'name': nameCtrl.text,
-                    'userIds': [currentUserId, ...selected],
-                    'admins': [currentUserId],
-                    'lastMessage': '',
-                    'createdAt': FieldValue.serverTimestamp(),
-                  });
+                  try {
+                    final ref = await _firestore.collection('chats').add({
+                      'type': 'group',
+                      'name': nameCtrl.text.trim(),
+                      'userIds': [currentUserId, ...selected],
+                      'admins': [currentUserId],
+                      'lastMessage': '',
+                      'createdAt': FieldValue.serverTimestamp(),
+                    });
 
-                  final chatDoc = await ref.get();
+                    final chatSnapshot = await ref.get();
 
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChatPage(
-                        currentUserId: currentUserId,
-                        chatModel: ChatModel.fromDoc(chatDoc),
-                        friendDoc: widget.userDoc,
+                    if (!chatSnapshot.exists) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Tạo group thất bại')),
+                      );
+                      return;
+                    }
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatPage(
+                          currentUserId: currentUserId,
+                          chatModel: ChatModel.fromDoc(chatSnapshot),
+                          friendDoc: widget.userDoc, // Group chat không cần friendDoc
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Lỗi: $e')),
+                    );
+                  }
                 },
                 child: const Text('Tạo'),
               ),
